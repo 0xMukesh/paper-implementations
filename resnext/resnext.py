@@ -1,6 +1,8 @@
 import torch 
 from torch import nn
 
+from utils import train_model_cifar10
+
 class ResNeXtBlock(nn.Module):
     expansion = 4
     
@@ -12,7 +14,7 @@ class ResNeXtBlock(nn.Module):
         self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=D, kernel_size=1)
         self.bn1 = nn.BatchNorm2d(num_features=D)
 
-        self.conv2 = nn.Conv2d(in_channels=D, out_channels=D, kernel_size=3, stride=stride, groups=cardinality)
+        self.conv2 = nn.Conv2d(in_channels=D, out_channels=D, kernel_size=3, stride=stride, groups=cardinality, padding=1)
         self.bn2 = nn.BatchNorm2d(num_features=D)
 
         self.conv3 = nn.Conv2d(in_channels=D, out_channels=base_out_channels * self.expansion, kernel_size=1)
@@ -71,7 +73,7 @@ class ResNeXt50(nn.Module):
             for _ in range(1, x):
                 blocks.append(self.block(in_channels=in_channels, base_out_channels=out_channels, cardinality=cardinality, width=width, stride=1))
             
-            layers.extend(*blocks)
+            layers.extend(blocks)
         
         return nn.Sequential(*layers)
     
@@ -83,3 +85,5 @@ class ResNeXt50(nn.Module):
         x = torch.flatten(x, 1)
         x = self.fc(x)
         return x
+    
+train_model_cifar10(lambda: ResNeXt50(block=ResNeXtBlock, classes=10, in_channels=3), 3)
