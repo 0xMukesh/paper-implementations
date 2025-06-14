@@ -10,3 +10,4 @@
 - [Inception-ResNet](https://arxiv.org/pdf/1602.07261)
 - [ResNeXt](https://arxiv.org/pdf/1611.05431)
 - [DenseNet](https://arxiv.org/pdf/1608.06993)
+- [R-CNN](https://arxiv.org/pdf/1311.2524)
