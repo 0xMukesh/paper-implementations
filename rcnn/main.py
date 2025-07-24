@@ -36,7 +36,7 @@ def selective_search(img_path: str, num_region_proposals: int):
     ss.setBaseImage(img)
     ss.switchToSelectiveSearchFast()
     rects = ss.process()
-    return rects[:num_region_proposals] if len(rects) > num_region_proposals else rects
+    return rects[:num_region_proposals]
     
 def compute_iou(box1: Bbox, box2: Bbox):
     (x1, y1, w1, h1) = box1
@@ -101,7 +101,7 @@ def apply_nms(predictions: list[tuple[int, float, float, float, float, float]], 
 
     return output
 
-def calculate_map(pred_bboxes, gt_bboxes, iou_threshold = 0.5, prob_threshold = 0.2, num_classes = 20):
+def compute_map(pred_bboxes, gt_bboxes, iou_threshold = 0.5, prob_threshold = 0.2, num_classes = 20):
     # pred_bboxes: [[test_img_idx, class_pred, pred_score, x1, x2, y1, y2], ...]
     # gt_bboxes: [[test_img_idx, class_idx, x1, x2, y1, y2]]
     
@@ -165,4 +165,14 @@ def calculate_map(pred_bboxes, gt_bboxes, iou_threshold = 0.5, prob_threshold = 
         average_precisions.append(ap)
 
     return sum(average_precisions) / len(average_precisions)
+
+def compute_map_range(pred_bboxes, gt_bboxes, prob_threshold, num_classes, start_iou, stop_iou, step_size):
+    total_map = 0
+    num_ious = 0
+
+    for iou in range(start_iou, stop_iou, step_size):
+        total_map += compute_map(pred_bboxes, gt_bboxes, iou, prob_threshold, num_classes)
+        num_ious += 1
+
+    return total_map / num_ious
 
