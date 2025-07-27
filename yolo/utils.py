@@ -26,5 +26,5 @@ def intersection_over_union(box_1: torch.Tensor, box_2: torch.Tensor, format: st
     box2_area = (box2_x2 - box2_x1) * (box2_y2 - box2_y1)
     union_area = box1_area + box2_area - inter_area
 
-    iou = inter_area / (union_area + 1e-6) 
+    iou = inter_area / (union_area + 1e-6)
     return iou

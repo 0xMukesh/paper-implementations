@@ -2,12 +2,12 @@ import torch
 from torch import nn
 from typing import List, Tuple, Union
 
-from .constants import SPLIT_SIZE, NUM_BBOXES_PER_SPLIT, NUM_CLASSES
+from yolo.constants import NUM_BBOXES_PER_SPLIT, NUM_CLASSES, SPLIT_SIZE
 
-type ConvLayerConfig = Tuple[int, int, int, int]
-type RepeatBlockConfig = List[Union[ConvLayerConfig, int]]
-type ArchConfigItem = Union[ConvLayerConfig, str, RepeatBlockConfig]
-type ArchConfig = List[ArchConfigItem]
+ConvLayerConfig = Tuple[int, int, int, int]
+RepeatBlockConfig = List[Union[ConvLayerConfig, int]]
+ArchConfigItem = Union[ConvLayerConfig, str, RepeatBlockConfig]
+ArchConfig = List[ArchConfigItem]
 
 ARCH_CONFIG: ArchConfig = [
     (7, 64, 2, 3),
@@ -55,11 +55,11 @@ class YOLOv1(nn.Module):
 
         self.in_channels = in_channels
         self.arch_config = arch_config
-        
+
         self.split_size = SPLIT_SIZE
         self.num_bboxes = NUM_BBOXES_PER_SPLIT
         self.num_classes = NUM_CLASSES
-        
+
         self.conv_layers = self._create_conv_layers()
         self.fc_layers = self._create_fc_layers()
 
@@ -80,7 +80,7 @@ class YOLOv1(nn.Module):
                 # repeated block
                 *conv_layers, num_repeat = cfg
                 if not isinstance(num_repeat, int):
-                    raise ValueError("invalid config") 
+                    raise ValueError("invalid config")
 
                 for _ in range(num_repeat):
                     for cfg in conv_layers:
@@ -92,14 +92,18 @@ class YOLOv1(nn.Module):
                         in_channels = out_channels
 
         return nn.Sequential(*layers)
-    
+
     def _create_fc_layers(self):
         return nn.Sequential(
-            nn.Linear(self.split_size * self.split_size * 1024, 4096),
+            nn.Linear(50176, 4096),
             nn.Dropout(0.5),
             nn.LeakyReLU(0.1),
             nn.Linear(4096, self.split_size * self.split_size * (self.num_classes + 5 * self.num_bboxes))
         )
 
     def forward(self, x) -> torch.Tensor:
-        return self.fc_layers(torch.flatten(self.conv_layers(x), start_dim=1))
+        out = self.conv_layers(x)
+        out = torch.flatten(out, start_dim=1)
+        out = self.fc_layers(out)
+
+        return out
