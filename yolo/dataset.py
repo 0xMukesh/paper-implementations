@@ -3,6 +3,7 @@ import pandas as pd
 from torch.utils.data import Dataset
 from PIL import Image
 import os
+from typing import Optional
 
 from yolo.constants import NUM_BBOXES_PER_SPLIT, NUM_CLASSES, SPLIT_SIZE
 
@@ -18,13 +19,14 @@ class VOCDataset(Dataset):
         split_size: int = SPLIT_SIZE,
         num_bboxes: int = NUM_BBOXES_PER_SPLIT,
         num_classes: int = NUM_CLASSES,
+        header: Optional[int] = None,
     ):
         super().__init__()
 
         self.root = root
         self.img_dir = img_dir
         self.label_dir = label_dir
-        self.df = pd.read_csv(os.path.join(root, csv_file), header=None)
+        self.df = pd.read_csv(os.path.join(root, csv_file), header=header)
         self.transform = transform
 
         self.S = split_size

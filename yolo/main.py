@@ -7,25 +7,16 @@ from yolo.dataset import VOCDataset
 from yolo.loss import YOLOLoss
 from yolo.model import ARCH_CONFIG, YOLOv1
 
-EPOCHS = 10
+EPOCHS = 200
 LEARNING_RATE = 2e-6
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 16
 NUM_WORKERS = 2
 PIN_MEMORY = True
 
-train_transform = T.Compose(
-    [
-        T.RandomHorizontalFlip(),
-        T.RandomVerticalFlip(),
-        T.Resize((448, 448)),
-        T.ToTensor(),
-        T.Normalize(mean=[0.4472, 0.4231, 0.3912], std=[0.2355, 0.2294, 0.2322]),
-    ]
-)
-test_transform = T.Compose([T.Resize((448, 448)), T.ToTensor()])
+transform = T.Compose([T.Resize((448, 448)), T.ToTensor()])
 
-train_dataset = VOCDataset(root="data", csv_file="train.csv")
+train_dataset = VOCDataset(root="voc", csv_file="train.csv", transform=transform)
 train_loader = DataLoader(
     dataset=train_dataset,
     batch_size=BATCH_SIZE,
@@ -34,7 +25,7 @@ train_loader = DataLoader(
     pin_memory=PIN_MEMORY,
 )
 
-test_dataset = VOCDataset(root="data", csv_file="test.csv")
+test_dataset = VOCDataset(root="voc", csv_file="test.csv", transform=transform)
 test_loader = DataLoader(
     dataset=test_dataset,
     batch_size=BATCH_SIZE,
