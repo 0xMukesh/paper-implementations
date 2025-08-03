@@ -87,13 +87,12 @@ class YOLOv1(nn.Module):
 
                         kernel_size, out_channels, stride, padding = cfg
                         layers.append(
-                            nn.Conv2d(
+                            Conv2dBlock(
                                 in_channels,
                                 out_channels,
                                 kernel_size,
                                 stride,
                                 padding,
-                                bias=False,
                             )
                         )
                         in_channels = out_channels
