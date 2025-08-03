@@ -1,52 +1,67 @@
-from typing import Tuple, TypeVar, Callable, Generic
-from PIL.Image import Image
-from torch.utils.data import Dataset
 import torch
-from torchvision import datasets
+import pandas as pd
+from torch.utils.data import Dataset
+from PIL import Image
+import os
 
-from yolo.constants import NUM_CLASSES, SPLIT_SIZE, VOC_CLASSES
+from yolo.constants import NUM_BBOXES_PER_SPLIT, NUM_CLASSES, SPLIT_SIZE
 
-VOC_CLASSES_TO_INDEX = {cls: index for index, cls in enumerate(VOC_CLASSES)}
 
-T = TypeVar("T")
-
-class VOCDataset(Dataset, Generic[T]):
-    def __init__(self, root: str, year: str, image_set: str, download: bool, transform: Callable[[Image], T]):
+class VOCDataset(Dataset):
+    def __init__(
+        self,
+        root: str,
+        csv_file: str,
+        transform,
+        img_dir: str = "images",
+        label_dir: str = "labels",
+        split_size: int = SPLIT_SIZE,
+        num_bboxes: int = NUM_BBOXES_PER_SPLIT,
+        num_classes: int = NUM_CLASSES,
+    ):
         super().__init__()
 
-        self.split_size = SPLIT_SIZE
-        self.num_classes = NUM_CLASSES
-        self.dataset = datasets.VOCDetection(root, year, image_set, download)
+        self.root = root
+        self.img_dir = img_dir
+        self.label_dir = label_dir
+        self.df = pd.read_csv(os.path.join(root, csv_file), header=None)
         self.transform = transform
 
-    def __getitem__(self, index) -> Tuple[T, torch.Tensor]:
-        img, annotations = self.dataset.__getitem__(index)
-        output = torch.zeros((self.split_size, self.split_size, self.num_classes + 5))
+        self.S = split_size
+        self.B = num_bboxes
+        self.C = num_classes
 
-        w = int(annotations["annotation"]["size"]["width"])
-        h = int(annotations["annotation"]["size"]["height"])
+    def __len__(self):
+        return len(self.df)
 
-        for obj in annotations["annotation"]["object"]:
-            obj_idx = VOC_CLASSES_TO_INDEX[obj["name"]]
-            xmin = int(obj["bndbox"]["xmin"])
-            xmax = int(obj["bndbox"]["xmax"])
-            ymin = int(obj["bndbox"]["ymin"])
-            ymax = int(obj["bndbox"]["ymax"])
+    def __getitem__(self, idx):
+        row = self.df.iloc[idx]
+        img_path = os.path.join(self.root, self.img_dir, row.iloc[0])
+        label_path = os.path.join(self.root, self.label_dir, row.iloc[1])
 
-            x_center = ((xmax + xmin) / 2) / w
-            y_center = ((ymax + ymin) / 2) / h
-            bbox_w = (xmax - xmin) / w
-            bbox_h = (ymax - ymin) / h
+        img = Image.open(img_path)
+        output = torch.zeros((self.S, self.S, 5 + self.C))
 
-            i = int(y_center * self.split_size)
-            j = int(x_center * self.split_size)
+        f = open(label_path)
+        lines = f.read().splitlines()
 
-            onehot = torch.zeros(self.num_classes)
-            onehot[obj_idx] = 1
-            bbox = torch.tensor([1.0, x_center, y_center, bbox_w, bbox_h])
-            output[i, j] = torch.cat([onehot, bbox])
+        for line in lines:
+            parts = line.split(" ")
+            class_idx = int(parts[0])
+            bboxes = [float(v) for v in parts[1:]]
+
+            x, y = bboxes[0], bboxes[1]
+            i = int(x * self.S)
+            j = int(y * self.S)
+
+            class_preds = torch.zeros((self.C))
+            class_preds[class_idx] = 1
+
+            class_tensor = torch.zeros(self.C)
+            class_tensor[class_idx] = 1.0
+
+            bbox_tensor = torch.tensor([1.0] + bboxes)
+
+            output[i][j] = torch.cat((class_tensor, bbox_tensor))
 
         return self.transform(img), output
-
-    def __len__(self) -> int:
-        return len(self.dataset)

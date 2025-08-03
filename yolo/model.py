@@ -19,35 +19,31 @@ ARCH_CONFIG: ArchConfig = [
     (1, 256, 1, 0),
     (3, 512, 1, 1),
     "M",
-    [
-        (1, 256, 1, 0),
-        (3, 512, 1, 1),
-        4
-    ],
+    [(1, 256, 1, 0), (3, 512, 1, 1), 4],
     (1, 512, 1, 0),
     (3, 1024, 1, 1),
     "M",
-    [
-        (1, 512, 1, 0),
-        (3, 1024, 1, 1),
-        2
-    ],
+    [(1, 512, 1, 0), (3, 1024, 1, 1), 2],
     (3, 1024, 1, 1),
     (3, 1024, 2, 1),
     (3, 1024, 1, 1),
     (3, 1024, 1, 1),
 ]
 
+
 class Conv2dBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride, padding) -> None:
         super().__init__()
 
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias=False)
+        self.conv = nn.Conv2d(
+            in_channels, out_channels, kernel_size, stride, padding, bias=False
+        )
         self.bn = nn.BatchNorm2d(out_channels)
         self.leakyrelu = nn.LeakyReLU(0.1)
 
     def forward(self, x):
         return self.leakyrelu(self.bn(self.conv(x)))
+
 
 class YOLOv1(nn.Module):
     def __init__(self, arch_config: ArchConfig, in_channels=3):
@@ -71,7 +67,9 @@ class YOLOv1(nn.Module):
             if isinstance(cfg, tuple) and all(isinstance(x, int) for x in cfg):
                 # conv layer
                 kernel_size, out_channels, stride, padding = cfg
-                layers.append(nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias=False))
+                layers.append(
+                    Conv2dBlock(in_channels, out_channels, kernel_size, stride, padding)
+                )
                 in_channels = out_channels
             elif isinstance(cfg, str) and cfg.lower() == "m":
                 # max pool
@@ -88,7 +86,16 @@ class YOLOv1(nn.Module):
                             raise ValueError("invalid config")
 
                         kernel_size, out_channels, stride, padding = cfg
-                        layers.append(nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias=False))
+                        layers.append(
+                            nn.Conv2d(
+                                in_channels,
+                                out_channels,
+                                kernel_size,
+                                stride,
+                                padding,
+                                bias=False,
+                            )
+                        )
                         in_channels = out_channels
 
         return nn.Sequential(*layers)
@@ -98,7 +105,12 @@ class YOLOv1(nn.Module):
             nn.Linear(50176, 4096),
             nn.Dropout(0.5),
             nn.LeakyReLU(0.1),
-            nn.Linear(4096, self.split_size * self.split_size * (self.num_classes + 5 * self.num_bboxes))
+            nn.Linear(
+                4096,
+                self.split_size
+                * self.split_size
+                * (self.num_classes + 5 * self.num_bboxes),
+            ),
         )
 
     def forward(self, x) -> torch.Tensor:
