@@ -72,10 +72,8 @@ class YOLOv1(nn.Module):
                 )
                 in_channels = out_channels
             elif isinstance(cfg, str) and cfg.lower() == "m":
-                # max pool
                 layers.append(nn.MaxPool2d(kernel_size=2, stride=2))
             elif isinstance(cfg, list):
-                # repeated block
                 *conv_layers, num_repeat = cfg
                 if not isinstance(num_repeat, int):
                     raise ValueError("invalid config")
@@ -88,11 +86,7 @@ class YOLOv1(nn.Module):
                         kernel_size, out_channels, stride, padding = cfg
                         layers.append(
                             Conv2dBlock(
-                                in_channels,
-                                out_channels,
-                                kernel_size,
-                                stride,
-                                padding,
+                                in_channels, out_channels, kernel_size, stride, padding
                             )
                         )
                         in_channels = out_channels

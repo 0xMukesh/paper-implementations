@@ -42,28 +42,32 @@ class VOCDataset(Dataset):
         label_path = os.path.join(self.root, self.label_dir, row.iloc[1])
 
         img = Image.open(img_path)
-        output = torch.zeros((self.S, self.S, 5 + self.C))
+        boxes = []
+        with open(label_path) as f:
+            for label in f.readlines():
+                class_label, x, y, width, height = [
+                    float(val) for val in label.replace("\n", "").split()
+                ]
+                boxes.append([class_label, x, y, width, height])
 
-        f = open(label_path)
-        lines = f.read().splitlines()
+        if self.transform:
+            img = self.transform(img)
 
-        for line in lines:
-            parts = line.split(" ")
-            class_idx = int(parts[0])
-            bboxes = [float(v) for v in parts[1:]]
+        label_matrix = torch.zeros((self.S, self.S, self.C + 5))
 
-            x, y = bboxes[0], bboxes[1]
-            i = int(x * self.S)
-            j = int(y * self.S)
+        for box in boxes:
+            class_label, x, y, width, height = box
+            class_label = int(class_label)
 
-            class_preds = torch.zeros((self.C))
-            class_preds[class_idx] = 1
+            i, j = int(self.S * y), int(self.S * x)
+            x_cell, y_cell = self.S * x - j, self.S * y - i
 
-            class_tensor = torch.zeros(self.C)
-            class_tensor[class_idx] = 1.0
+            if label_matrix[i, j, 20] == 0:
+                label_matrix[i, j, 20] = 1
+                # `x_cell` and `y_cell` are relative to the grid cell
+                # `width` and `height` are relative to the image
+                box_coordinates = torch.tensor([x_cell, y_cell, width, height])
+                label_matrix[i, j, 21:25] = box_coordinates
+                label_matrix[i, j, class_label] = 1
 
-            bbox_tensor = torch.tensor([1.0] + bboxes)
-
-            output[i][j] = torch.cat((class_tensor, bbox_tensor))
-
-        return self.transform(img), output
+        return img, label_matrix

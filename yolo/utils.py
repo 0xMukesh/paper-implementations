@@ -1,6 +1,9 @@
 import torch
 
-def intersection_over_union(box_1: torch.Tensor, box_2: torch.Tensor, format: str = "midpoint"):
+
+def intersection_over_union(
+    box_1: torch.Tensor, box_2: torch.Tensor, format: str = "midpoint"
+):
     if format == "midpoint":
         box1_x1 = box_1[..., 0] - box_1[..., 2] / 2
         box1_y1 = box_1[..., 1] - box_1[..., 3] / 2
@@ -12,8 +15,18 @@ def intersection_over_union(box_1: torch.Tensor, box_2: torch.Tensor, format: st
         box2_x2 = box_2[..., 0] + box_2[..., 2] / 2
         box2_y2 = box_2[..., 1] + box_2[..., 3] / 2
     else:
-        box1_x1, box1_y1, box1_x2, box1_y2 = box_1[..., 0], box_1[..., 1], box_1[..., 2], box_1[..., 3]
-        box2_x1, box2_y1, box2_x2, box2_y2 = box_2[..., 0], box_2[..., 1], box_2[..., 2], box_2[..., 3]
+        box1_x1, box1_y1, box1_x2, box1_y2 = (
+            box_1[..., 0],
+            box_1[..., 1],
+            box_1[..., 2],
+            box_1[..., 3],
+        )
+        box2_x1, box2_y1, box2_x2, box2_y2 = (
+            box_2[..., 0],
+            box_2[..., 1],
+            box_2[..., 2],
+            box_2[..., 3],
+        )
 
     inter_x1 = torch.max(box1_x1, box2_x1)
     inter_y1 = torch.max(box1_y1, box2_y1)

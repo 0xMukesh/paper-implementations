@@ -8,71 +8,74 @@ from yolo.utils import intersection_over_union
 class YOLOLoss(nn.Module):
     def __init__(self):
         super().__init__()
-        self.mse = nn.MSELoss(reduction="mean")
-
-        self.split_size = SPLIT_SIZE
-        self.num_bboxes = NUM_BBOXES_PER_SPLIT
-        self.num_classes = NUM_CLASSES
+        self.mse = nn.MSELoss(reduction="sum")
+        self.S = SPLIT_SIZE
+        self.B = NUM_BBOXES_PER_SPLIT
+        self.C = NUM_CLASSES
         self.epsilon = 1e-6
-
         self.lambda_coord = 5
         self.lambda_noobj = 0.5
 
     def forward(self, predictions: torch.Tensor, targets: torch.Tensor):
-        predictions = predictions.reshape(
-            -1, self.split_size, self.split_size, self.num_classes + self.num_bboxes * 5
-        )
+        predictions = predictions.reshape(-1, self.S, self.S, self.C + self.B * 5)
 
-        I_obj = targets[..., 20]
-        I_noobj = 1 - I_obj
-        target_bbox_coords = targets[..., 21:25]
+        target_classes = targets[..., : self.C]
+        target_confidence = targets[..., self.C : self.C + 1]
+        target_boxes = targets[..., self.C + 1 : self.C + 5]
 
-        pred_bbox1_coords = predictions[..., 21:25]
-        pred_bbox2_coords = predictions[..., 26:30]
+        pred_classes = predictions[..., : self.C]
+        pred_confidence1 = predictions[..., self.C : self.C + 1]
+        pred_boxes1 = predictions[..., self.C + 1 : self.C + 5]
+        pred_confidence2 = predictions[..., self.C + 5 : self.C + 6]
+        pred_boxes2 = predictions[..., self.C + 6 : self.C + 10]
 
-        iou_bbox1 = intersection_over_union(pred_bbox1_coords, target_bbox_coords)
-        iou_bbox2 = intersection_over_union(pred_bbox2_coords, target_bbox_coords)
-        ious = torch.cat((iou_bbox1.unsqueeze(0), iou_bbox2.unsqueeze(0)))
+        iou_b1 = intersection_over_union(pred_boxes1, target_boxes, format="midpoint")
+        iou_b2 = intersection_over_union(pred_boxes2, target_boxes, format="midpoint")
 
+        ious = torch.cat([iou_b1.unsqueeze(0), iou_b2.unsqueeze(0)], dim=0)
         _, bestbox = torch.max(ious, dim=0)
-        bestbox = bestbox.float()
 
-        box_preds = (
-            bestbox.unsqueeze(-1) * pred_bbox2_coords
-            + (1 - bestbox.unsqueeze(-1)) * pred_bbox1_coords
+        exists_box = target_confidence
+
+        bestbox_expanded = bestbox.unsqueeze(3)
+
+        box_predictions = exists_box * (
+            (1 - bestbox_expanded) * pred_boxes1 + bestbox_expanded * pred_boxes2
         )
-        box_preds = I_obj.unsqueeze(-1) * box_preds
-        box_targets = I_obj.unsqueeze(-1) * target_bbox_coords
+        box_targets = exists_box * target_boxes
 
-        box_preds_wh = torch.sqrt(torch.clamp(box_preds[..., 2:4], min=self.epsilon))
-        box_preds_modified = torch.cat([box_preds[..., :2], box_preds_wh], dim=-1)
-
-        box_targets_wh = torch.sqrt(
-            torch.clamp(box_targets[..., 2:4], min=self.epsilon)
+        box_predictions[..., 2:4] = torch.sign(box_predictions[..., 2:4]) * torch.sqrt(
+            torch.abs(box_predictions[..., 2:4] + self.epsilon)
         )
-        box_targets_modified = torch.cat([box_targets[..., :2], box_targets_wh], dim=-1)
+        box_targets[..., 2:4] = torch.sqrt(box_targets[..., 2:4] + self.epsilon)
 
-        box_loss = self.mse(box_preds_modified, box_targets_modified)
+        box_loss = self.mse(
+            torch.flatten(box_predictions, end_dim=-2),
+            torch.flatten(box_targets, end_dim=-2),
+        )
 
-        pred_confidence1 = predictions[..., 20]
-        pred_confidence2 = predictions[..., 25]
-        pred_confidence = bestbox * pred_confidence2 + (1 - bestbox) * pred_confidence1
-        pred_confidence = I_obj * pred_confidence
-        target_confidence = I_obj * targets[..., 20]
-        obj_loss = self.mse(pred_confidence.flatten(), target_confidence.flatten())
+        pred_confidence = (
+            1 - bestbox_expanded
+        ) * pred_confidence1 + bestbox_expanded * pred_confidence2
+
+        obj_loss = self.mse(
+            torch.flatten(exists_box * pred_confidence),
+            torch.flatten(exists_box * target_confidence),
+        )
 
         no_obj_loss = self.mse(
-            (I_noobj * pred_confidence1).flatten(),
-            (I_noobj * targets[..., 20]).flatten(),
+            torch.flatten((1 - exists_box) * pred_confidence1),
+            torch.flatten((1 - exists_box) * torch.zeros_like(target_confidence)),
         )
         no_obj_loss += self.mse(
-            (I_noobj * pred_confidence2).flatten(),
-            (I_noobj * targets[..., 20]).flatten(),
+            torch.flatten((1 - exists_box) * pred_confidence2),
+            torch.flatten((1 - exists_box) * torch.zeros_like(target_confidence)),
         )
 
-        pred_class_probs = predictions[..., : self.num_classes].flatten(end_dim=-2)
-        target_class_probs = targets[..., : self.num_classes].flatten(end_dim=-2)
-        class_loss = self.mse(pred_class_probs, target_class_probs)
+        class_loss = self.mse(
+            torch.flatten(exists_box * pred_classes, end_dim=-2),
+            torch.flatten(exists_box * target_classes, end_dim=-2),
+        )
 
         loss = (
             self.lambda_coord * box_loss
@@ -80,4 +83,5 @@ class YOLOLoss(nn.Module):
             + self.lambda_noobj * no_obj_loss
             + class_loss
         )
-        return loss
+
+        return loss, box_loss, obj_loss, no_obj_loss, class_loss
