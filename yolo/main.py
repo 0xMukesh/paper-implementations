@@ -6,6 +6,7 @@ from tqdm import tqdm
 from yolo.dataset import VOCDataset
 from yolo.loss import YOLOLoss
 from yolo.model import ARCH_CONFIG, YOLOv1
+from yolo.utils import get_bboxes, mean_average_precision
 
 EPOCHS = 1000
 LEARNING_RATE = 2e-5
@@ -42,6 +43,7 @@ criterion = YOLOLoss().to(DEVICE)
 optimizer = torch.optim.Adam(params=model.parameters(), lr=LEARNING_RATE)
 
 for epoch in range(EPOCHS):
+    model.train()
     mean_losses = {"box_loss": [], "obj_loss": [], "no_obj_loss": [], "class_loss": []}
 
     loop = tqdm(enumerate(train_loader), total=len(train_loader), leave=True)
@@ -75,18 +77,20 @@ for epoch in range(EPOCHS):
             class_loss=class_loss.item(),
         )
 
-    print(f"\nmean losses for epoch {epoch + 1}:")
-    print(
-        f"  box loss: {sum(mean_losses["box_loss"])/len(mean_losses["box_loss"]):.4f}"
-    )
-    print(
-        f"  object loss: {sum(mean_losses["obj_loss"])/len(mean_losses["obj_loss"]):.4f}"
-    )
-    print(
-        f"  no object loss: {sum(mean_losses["no_obj_loss"])/len(mean_losses["no_obj_loss"]):.4f}"
-    )
-    print(
-        f"  class loss: {sum(mean_losses["class_loss"])/len(mean_losses["class_loss"]):.4f}"
-    )
+    gt_bboxes, pred_bboxes = get_bboxes(test_loader, model, DEVICE)
+    map = mean_average_precision(gt_bboxes, pred_bboxes)
 
-    
+    print(f"\nsummary for epoch {epoch + 1}:")
+    print(f"  mean average precision: {map:.4f}")
+    print(
+        f'  mean box loss: {sum(mean_losses["box_loss"])/len(mean_losses["box_loss"]):.4f}'
+    )
+    print(
+        f'  mean object loss: {sum(mean_losses["obj_loss"])/len(mean_losses["obj_loss"]):.4f}'
+    )
+    print(
+        f'  mean no object loss: {sum(mean_losses["no_obj_loss"])/len(mean_losses["no_obj_loss"]):.4f}'
+    )
+    print(
+        f'  mean class loss: {sum(mean_losses["class_loss"])/len(mean_losses["class_loss"]):.4f}'
+    )
