@@ -3,33 +3,70 @@ from torch import nn
 
 from utils import train_model_cifar10
 
+
 class InceptionV1Block(nn.Module):
     def __init__(self, arch: list[int], in_channels: int):
         super().__init__()
 
         self.b1 = nn.Sequential(
-            nn.Conv2d(in_channels=in_channels, out_channels=arch[0], kernel_size=1, stride=1, padding=0),
-            nn.ReLU()
+            nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=arch[0],
+                kernel_size=1,
+                stride=1,
+                padding=0,
+            ),
+            nn.ReLU(),
         )
 
         self.b2 = nn.Sequential(
-            nn.Conv2d(in_channels=in_channels, out_channels=arch[1], kernel_size=1, stride=1, padding=0),
+            nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=arch[1],
+                kernel_size=1,
+                stride=1,
+                padding=0,
+            ),
             nn.ReLU(),
-            nn.Conv2d(in_channels=arch[1], out_channels=arch[2], kernel_size=3, stride=1, padding=1),
-            nn.ReLU()
+            nn.Conv2d(
+                in_channels=arch[1],
+                out_channels=arch[2],
+                kernel_size=3,
+                stride=1,
+                padding=1,
+            ),
+            nn.ReLU(),
         )
 
         self.b3 = nn.Sequential(
-            nn.Conv2d(in_channels=in_channels, out_channels=arch[3], kernel_size=1, stride=1, padding=0),
+            nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=arch[3],
+                kernel_size=1,
+                stride=1,
+                padding=0,
+            ),
             nn.ReLU(),
-            nn.Conv2d(in_channels=arch[3], out_channels=arch[4], kernel_size=5, stride=1, padding=2),
-            nn.ReLU()
+            nn.Conv2d(
+                in_channels=arch[3],
+                out_channels=arch[4],
+                kernel_size=5,
+                stride=1,
+                padding=2,
+            ),
+            nn.ReLU(),
         )
 
         self.b4 = nn.Sequential(
             nn.MaxPool2d(kernel_size=3, stride=1, padding=1),
-            nn.Conv2d(in_channels=in_channels, out_channels=arch[5], kernel_size=1, stride=1, padding=0),
-            nn.ReLU()
+            nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=arch[5],
+                kernel_size=1,
+                stride=1,
+                padding=0,
+            ),
+            nn.ReLU(),
         )
 
     def forward(self, x):
@@ -40,12 +77,15 @@ class InceptionV1Block(nn.Module):
 
         return torch.concat([b1, b2, b3, b4], 1)
 
+
 class AuxiliaryClassifier(nn.Module):
     def __init__(self, in_channels: int, classes: int):
         super().__init__()
 
         self.avgpool = nn.AvgPool2d(kernel_size=5, stride=3)
-        self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=128, kernel_size=1, padding="same")
+        self.conv1 = nn.Conv2d(
+            in_channels=in_channels, out_channels=128, kernel_size=1, padding="same"
+        )
         self.fc1 = nn.Linear(in_features=128, out_features=1024)
         self.fc2 = nn.Linear(in_features=1024, out_features=classes)
 
@@ -61,15 +101,22 @@ class AuxiliaryClassifier(nn.Module):
 
         return x
 
+
 class GoogLeNet(nn.Module):
     def __init__(self, classes: int, in_channels: int = 3):
         super().__init__()
 
-        self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=64, kernel_size=7, stride=2, padding=3)
+        self.conv1 = nn.Conv2d(
+            in_channels=in_channels, out_channels=64, kernel_size=7, stride=2, padding=3
+        )
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
-        self.conv2 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=1, stride=1, padding=0)
-        self.conv3 = nn.Conv2d(in_channels=64, out_channels=192, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(
+            in_channels=64, out_channels=64, kernel_size=1, stride=1, padding=0
+        )
+        self.conv3 = nn.Conv2d(
+            in_channels=64, out_channels=192, kernel_size=3, stride=1, padding=1
+        )
 
         self.incep_3a = InceptionV1Block([64, 96, 128, 16, 32, 32], 192)
         self.incep_3b = InceptionV1Block([128, 128, 192, 32, 96, 64], 256)
@@ -126,7 +173,7 @@ class GoogLeNet(nn.Module):
             outputs.append(self.aux2(x))
         else:
             outputs.append(None)
-        
+
         x = self.incep_4e(x)
 
         x = self.maxpool(x)
@@ -140,6 +187,7 @@ class GoogLeNet(nn.Module):
 
         outputs.append(x)
 
-        return outputs        
+        return outputs
+
 
 train_model_cifar10(lambda: GoogLeNet(classes=10, in_channels=3), 5)

@@ -27,8 +27,10 @@ viii) mAP (mean average precision) is used evalute the object detection model.
 
 Bbox = tuple[float, float, float, float]
 
+
 def rect_to_bbox(r: Rect) -> Bbox:
     return (r[0], r[1], r[2], r[3])
+
 
 def selective_search(img_path: str, num_region_proposals: int):
     img = cv2.imread(img_path, cv2.IMREAD_COLOR)
@@ -37,19 +39,20 @@ def selective_search(img_path: str, num_region_proposals: int):
     ss.switchToSelectiveSearchFast()
     rects = ss.process()
     return rects[:num_region_proposals]
-    
+
+
 def compute_iou(box1: Bbox, box2: Bbox):
     (x1, y1, w1, h1) = box1
     (x2, y2, w2, h2) = box2
 
     xA = max(x1, x2)
     yA = max(y1, y2)
-    xB = min(x1+w1, x2+w2)
-    yB = min(y1+h1, y2+h2)
+    xB = min(x1 + w1, x2 + w2)
+    yB = min(y1 + h1, y2 + h2)
 
     inter_width = max(0, xB - xA)
     inter_height = max(0, yB - yA)
-    
+
     intersection_area = inter_width * inter_height
     union_area = (w1 * h1) + (w2 * h2) - intersection_area
 
@@ -57,6 +60,7 @@ def compute_iou(box1: Bbox, box2: Bbox):
         return 0
 
     return intersection_area / union_area
+
 
 def apply_iou_to_ss_output(rects: Sequence[Rect], gt: dict[Bbox, str]):
     output: dict[Bbox, tuple[Bbox, str]] = {}
@@ -70,7 +74,7 @@ def apply_iou_to_ss_output(rects: Sequence[Rect], gt: dict[Bbox, str]):
 
         for bbox, label in gt.items():
             iou = compute_iou(r, bbox)
-            
+
             if iou > best_iou:
                 best_iou = iou
                 best_label = label
@@ -85,7 +89,11 @@ def apply_iou_to_ss_output(rects: Sequence[Rect], gt: dict[Bbox, str]):
     return output
 
 
-def apply_nms(predictions: list[tuple[int, float, float, float, float, float]], prob_threshold = 0.2, iou_threshold = 0.5):
+def apply_nms(
+    predictions: list[tuple[int, float, float, float, float, float]],
+    prob_threshold=0.2,
+    iou_threshold=0.5,
+):
     # predictions - [[class, probability, x1, y1, x2, y2]]
 
     boxes = [box for box in predictions if box[0] > prob_threshold]
@@ -95,20 +103,26 @@ def apply_nms(predictions: list[tuple[int, float, float, float, float, float]], 
     while boxes:
         chosen_box = boxes.pop(0)
         boxes = [
-            box for box in boxes if box[0] != chosen_box[0] or compute_iou(box[2:], chosen_box[2:]) < iou_threshold
+            box
+            for box in boxes
+            if box[0] != chosen_box[0]
+            or compute_iou(box[2:], chosen_box[2:]) < iou_threshold
         ]
         output.append(chosen_box)
 
     return output
 
-def compute_map(pred_bboxes, gt_bboxes, iou_threshold = 0.5, prob_threshold = 0.2, num_classes = 20):
+
+def compute_map(
+    pred_bboxes, gt_bboxes, iou_threshold=0.5, prob_threshold=0.2, num_classes=20
+):
     # pred_bboxes: [[test_img_idx, class_pred, pred_score, x1, x2, y1, y2], ...]
     # gt_bboxes: [[test_img_idx, class_idx, x1, x2, y1, y2]]
-    
-    average_precisions: list[torch.Tensor] = [] 
+
+    average_precisions: list[torch.Tensor] = []
 
     for c in range(num_classes):
-        detections = [] 
+        detections = []
         ground_truths = []
 
         for pred in pred_bboxes:
@@ -122,18 +136,20 @@ def compute_map(pred_bboxes, gt_bboxes, iou_threshold = 0.5, prob_threshold = 0.
         counts = Counter([gt[0] for gt in ground_truths])
         num_bboxes = {k: torch.zeros(v) for k, v in counts.items()}
 
-        detections.sort(key=lambda x: x[2], reverse=True) # sort with decreasing order of predicted score
+        detections.sort(
+            key=lambda x: x[2], reverse=True
+        )  # sort with decreasing order of predicted score
 
         true_positives = torch.zeros(len(detections))
         false_positives = torch.zeros(len(detections))
         total_true_bboxes = len(ground_truths)
 
-        for (detection_idx, detection) in enumerate(detections):
+        for detection_idx, detection in enumerate(detections):
             gts = [gt for gt in ground_truths if gt[0] == detection[0]]
             best_iou = 0
             best_gt_idx = -1
 
-            for (gt_idx, gt) in enumerate(gts):
+            for gt_idx, gt in enumerate(gts):
                 gt_bbox = gt[2:]
                 pred_bbox = detection[3:]
 
@@ -155,10 +171,12 @@ def compute_map(pred_bboxes, gt_bboxes, iou_threshold = 0.5, prob_threshold = 0.
         true_positives_cumsum = torch.cumsum(true_positives, dim=0)
         false_positive_cumsum = torch.cumsum(false_positives, dim=0)
 
-        precision = torch.divide(true_positives_cumsum, true_positives_cumsum + false_positive_cumsum)
+        precision = torch.divide(
+            true_positives_cumsum, true_positives_cumsum + false_positive_cumsum
+        )
         recall = torch.divide(true_positives_cumsum, total_true_bboxes)
         # adds the "initial" trapezoid while calculating AUC
-        precision = torch.cat((torch.tensor([1]), precision), dim=0) 
+        precision = torch.cat((torch.tensor([1]), precision), dim=0)
         recall = torch.cat((torch.tensor([0]), recall), dim=0)
 
         ap = torch.trapezoid(precision, recall)
@@ -166,13 +184,17 @@ def compute_map(pred_bboxes, gt_bboxes, iou_threshold = 0.5, prob_threshold = 0.
 
     return sum(average_precisions) / len(average_precisions)
 
-def compute_map_range(pred_bboxes, gt_bboxes, prob_threshold, num_classes, start_iou, stop_iou, step_size):
+
+def compute_map_range(
+    pred_bboxes, gt_bboxes, prob_threshold, num_classes, start_iou, stop_iou, step_size
+):
     total_map = 0
     num_ious = 0
 
     for iou in range(start_iou, stop_iou, step_size):
-        total_map += compute_map(pred_bboxes, gt_bboxes, iou, prob_threshold, num_classes)
+        total_map += compute_map(
+            pred_bboxes, gt_bboxes, iou, prob_threshold, num_classes
+        )
         num_ious += 1
 
     return total_map / num_ious
-
