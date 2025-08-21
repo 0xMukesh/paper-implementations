@@ -12,3 +12,4 @@
 - [DenseNet](https://arxiv.org/pdf/1608.06993)
 - [R-CNN](https://arxiv.org/pdf/1311.2524)
 - [YOLO v1](https://arxiv.org/pdf/1506.02640)
+- [U-Net](https://arxiv.org/pdf/1505.04597)
