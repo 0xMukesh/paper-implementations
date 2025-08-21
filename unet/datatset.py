@@ -1,8 +1,9 @@
 from torch.utils.data import Dataset
 from PIL import Image
-import os
-from typing import Tuple
 import numpy as np
+import os
+import math
+from typing import Tuple, Literal
 
 
 class TeethSegmentationDataset(Dataset):
@@ -12,7 +13,9 @@ class TeethSegmentationDataset(Dataset):
         imgs_dir: str,
         masks_dir: str,
         target_size: Tuple[int, int],
+        split: Literal["train", "val"],
         transform=None,
+        seed: int = 42,
     ) -> None:
         super().__init__()
 
@@ -21,24 +24,33 @@ class TeethSegmentationDataset(Dataset):
         self.target_size = target_size
         self.transform = transform
 
+        self.total_len = len(os.listdir(self.imgs_dir))
+
+        np.random.seed(seed)
+        self.img_nums = np.random.choice(
+            np.arange(1, self.total_len + 1),
+            (
+                math.floor(self.total_len * 0.8)
+                if split == "train"
+                else math.ceil(self.total_len * 0.2)
+            ),
+            replace=False,
+        )
+
     def __len__(self) -> int:
-        return len(os.listdir(self.imgs_dir))
+        return len(self.img_nums)
 
     def __getitem__(self, idx) -> Tuple[Image.Image, Image.Image]:
         img = Image.open(
-            os.path.join(self.imgs_dir, f"{idx+1}.jpg"),
+            os.path.join(self.imgs_dir, f"{self.img_nums[idx]}.jpg"),
         ).convert("L")
-        mask = Image.open(os.path.join(self.masks_dir, f"{idx+1}.png")).convert("L")
+        mask = Image.open(
+            os.path.join(self.masks_dir, f"{self.img_nums[idx]}.png")
+        ).convert("L")
 
-        # resize image using bilinear for smooth gradient
         img = img.resize(self.target_size, Image.Resampling.BILINEAR)
-        # resize mask using nearset to avoid creating additional class values, as bilinear uses intermediate values
         mask = mask.resize(self.target_size, Image.Resampling.NEAREST)
-
-        # convert mask to binary image/matrix which contains either 1 (if tooth exists) or 0
-        mask_img_array = np.array(mask)
-        binary_array = np.where(mask_img_array > 0, 255, 0).astype(np.uint8)
-        mask = Image.fromarray(binary_array, mode="L")
+        mask = mask.point(lambda x: 255 if x > 0 else 0)  # type: ignore
 
         if self.transform:
             img = self.transform(img)

@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-import torchvision.transforms.functional as VF
+import torchvision.transforms.functional as TF
 from typing import List
 
 
@@ -38,19 +38,12 @@ class UNet(nn.Module):
         self,
         in_channels: int,
         num_classes: int,
-        features: List[int] = [
-            64,
-            128,
-            256,
-            512,
-        ],
+        features: List[int] = [64, 128, 256, 512],
     ) -> None:
         super().__init__()
 
         self._downs = nn.ModuleList()
         self._ups = nn.ModuleList()
-
-        self.in_channels = in_channels
 
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
 
@@ -60,23 +53,20 @@ class UNet(nn.Module):
             )
             in_channels = feature
 
-        for feature in reversed(features):
-            self._ups.append(
-                nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
-            )
-            self._ups.append(
-                nn.Conv2d(
-                    in_channels=feature * 2,
-                    out_channels=feature,
-                    kernel_size=3,
-                    padding=1,
-                )
-            )
-            self._ups.append(DoubleConv(in_channels=feature * 2, out_channels=feature))
-
         self._bottleneck = DoubleConv(
             in_channels=features[-1], out_channels=features[-1] * 2
         )
+
+        for feature in reversed(features):
+            self._ups.append(
+                nn.ConvTranspose2d(
+                    in_channels=feature * 2,
+                    out_channels=feature,
+                    kernel_size=2,
+                    stride=2,
+                )
+            )
+            self._ups.append(DoubleConv(in_channels=feature * 2, out_channels=feature))
 
         self._final_conv = nn.Conv2d(
             in_channels=features[0], out_channels=num_classes, kernel_size=1
@@ -94,26 +84,15 @@ class UNet(nn.Module):
 
         skip_connections = skip_connections[::-1]
 
-        for i in range(0, len(skip_connections)):
-            skip_connection = skip_connections[i]
-
-            x = self._ups[3 * i](x)
-            x = self._ups[3 * i + 1](x)
+        for i in range(0, len(self._ups), 2):
+            x = self._ups[i](x)
+            skip_connection = skip_connections[i // 2]
 
             if skip_connection.shape != x.shape:
-                h, w = x.shape[-2:]
-                skip_connection = VF.resize(skip_connection, [h, w])
+                h, w = skip_connection.shape[2:]
+                x = TF.resize(x, [h, w])
 
-            x = torch.cat((x, skip_connection), dim=1)
-            x = self._ups[3 * i + 2](x)
+            x = torch.cat((skip_connection, x), dim=1)
+            x = self._ups[i + 1](x)
 
-        x = self._final_conv(x)
-
-        return x
-
-
-if __name__ == "__main__":
-    model = UNet(in_channels=1, num_classes=1)
-    x = torch.randn((1, 1, 572, 572))
-    x = model.forward(x)
-    print(x.shape)
+        return self._final_conv(x)
