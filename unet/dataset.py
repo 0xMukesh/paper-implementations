@@ -1,0 +1,49 @@
+from torch.utils.data import Dataset
+from PIL import Image
+import numpy as np
+import os
+from typing import Literal
+
+from .utils import CombinedTransform
+
+
+class CarvanaDataset(Dataset):
+    def __init__(
+        self,
+        root: str,
+        split: Literal["train", "test"],
+        combined_transform: CombinedTransform | None = None,
+    ) -> None:
+        super().__init__()
+
+        self.root = root
+        self.combined_transform = combined_transform
+
+        self.img_dir = os.path.join(self.root, "train_images")
+        self.mask_dir = os.path.join(self.root, "train_masks")
+
+        basenames = [
+            f.split(".")[0] for f in os.listdir(self.img_dir) if f.endswith(".jpg")
+        ]
+        basenames = sorted(basenames)
+
+        np.random.shuffle(basenames)
+
+        split_idx = int(len(basenames) * 0.8)
+        basenames = basenames[:split_idx] if split == "train" else basenames[split_idx:]
+
+        self.img_files = [os.path.join(self.img_dir, f + ".jpg") for f in basenames]
+        self.mask_files = [os.path.join(self.mask_dir, f + ".png") for f in basenames]
+
+    def __len__(self) -> int:
+        return len(self.img_files)
+
+    def __getitem__(self, idx):
+        img = Image.open(self.img_files[idx]).convert("RGB")
+        mask = Image.open(self.mask_files[idx])
+        mask = Image.fromarray(np.asarray(mask) * 255).convert("L")
+
+        if self.combined_transform:
+            img, mask = self.combined_transform(img, mask)
+
+        return (img, mask)

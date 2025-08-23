@@ -8,7 +8,7 @@ class DoubleConv(nn.Module):
     def __init__(self, in_channels: int, out_channels: int) -> None:
         super().__init__()
 
-        self.conv = nn.Sequential(
+        self.model = nn.Sequential(
             nn.Conv2d(
                 in_channels=in_channels,
                 out_channels=out_channels,
@@ -30,7 +30,8 @@ class DoubleConv(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.conv(x)
+        x = self.model(x)
+        return x
 
 
 class UNet(nn.Module):
@@ -42,57 +43,64 @@ class UNet(nn.Module):
     ) -> None:
         super().__init__()
 
-        self._downs = nn.ModuleList()
-        self._ups = nn.ModuleList()
-
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
 
-        for feature in features:
-            self._downs.append(
-                DoubleConv(in_channels=in_channels, out_channels=feature)
-            )
-            in_channels = feature
+        # encoder
+        self.encoder = nn.ModuleList()
+        for up in features:
+            self.encoder.append(DoubleConv(in_channels=in_channels, out_channels=up))
+            in_channels = up
 
-        self._bottleneck = DoubleConv(
+        # bottleneck
+        self.bottleneck = DoubleConv(
             in_channels=features[-1], out_channels=features[-1] * 2
         )
 
-        for feature in reversed(features):
-            self._ups.append(
+        # decoder
+        self.decoder = nn.ModuleList()
+        for down in features[::-1]:
+            self.decoder.append(
                 nn.ConvTranspose2d(
-                    in_channels=feature * 2,
-                    out_channels=feature,
-                    kernel_size=2,
-                    stride=2,
+                    in_channels=down * 2, out_channels=down, kernel_size=2, stride=2
                 )
             )
-            self._ups.append(DoubleConv(in_channels=feature * 2, out_channels=feature))
+            self.decoder.append(DoubleConv(in_channels=down * 2, out_channels=down))
 
-        self._final_conv = nn.Conv2d(
+        self.final_conv = nn.Conv2d(
             in_channels=features[0], out_channels=num_classes, kernel_size=1
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         skip_connections: List[torch.Tensor] = []
 
-        for down in self._downs:
-            x = down(x)
+        # encoder
+        for enc in self.encoder:
+            x = enc(x)
             skip_connections.append(x)
             x = self.pool(x)
 
-        x = self._bottleneck(x)
+        # bottleneck
+        x = self.bottleneck(x)
 
-        skip_connections = skip_connections[::-1]
+        # decoder
+        for i, skip_connection in enumerate(skip_connections[::-1]):
+            conv_transpose = self.decoder[2 * i]
+            double_conv = self.decoder[2 * i + 1]
 
-        for i in range(0, len(self._ups), 2):
-            x = self._ups[i](x)
-            skip_connection = skip_connections[i // 2]
+            # upscale image
+            x = conv_transpose(x)
 
+            # resize skip connection
             if skip_connection.shape != x.shape:
-                h, w = skip_connection.shape[2:]
-                x = TF.resize(x, [h, w])
+                h, w = x.shape[2:]
+                skip_connection = TF.resize(skip_connection, [h, w])
 
-            x = torch.cat((skip_connection, x), dim=1)
-            x = self._ups[i + 1](x)
+            # combine skip connection + upscale image
+            x = torch.cat((x, skip_connection), dim=1)
 
-        return self._final_conv(x)
+            # apply double conv
+            x = double_conv(x)
+
+        x = self.final_conv(x)
+
+        return x

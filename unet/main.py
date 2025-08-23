@@ -1,55 +1,60 @@
 import torch
-from torch import nn
 from torch.utils.data import DataLoader
-from torchvision import transforms as T
+import torchvision.transforms as T
+import numpy as np
 from tqdm import tqdm
 import os
+from typing import cast
 
-from unet.datatset import TeethSegmentationDataset
+from unet.dataset import CarvanaDataset
 from unet.model import UNet
-from unet.utils import calculate_accuracy
+from unet.loss import BCEDiceLoss
+from unet.utils import CombinedTransform, run_inference, plot_loss_curve
 
-DATASET_ROOT = "/home/mukesh/.cache/kagglehub/datasets/humansintheloop/teeth-segmentation-on-dental-x-ray-images/versions/1/Teeth Segmentation PNG/d2"
-IMGS_DIR = "img"
-MASKS_DIR = "masks_machine"
-CHECKPOINTS_DIR = "checkpoints"
-TARGET_SIZE = (512, 256)
-BATCH_SIZE = 32
-NUM_EPOCHS = 70
-LEARNING_RATE = 1e-3
-WEIGHT_DECAY = 1e-4
-PATIENCE = 5
+np.random.seed(42)
+
+DATASET_ROOT = "/kaggle/input/carvana-image-masking-png"
+TARGET_SIZE = (960 // 4, 640 // 4)
 PIN_MEMORY = True
 NUM_WORKERS = 2
 
-train_transform = T.Compose(
-    [T.RandomHorizontalFlip(), T.RandomVerticalFlip(), T.ToTensor()]
-)
-test_transform = T.Compose([T.ToTensor()])
+NUM_EPOCHS = 1
+BATCH_SIZE = 16
+LEARNING_RATE = 1e-4
+WEIGHT_DECAY = 1e-3
 
-train_dataset = TeethSegmentationDataset(
-    root=DATASET_ROOT,
-    imgs_dir=IMGS_DIR,
-    masks_dir=MASKS_DIR,
-    target_size=TARGET_SIZE,
-    split="train",
+CHECKPOINTS_DIR = "checkpoints"
+
+additional_transform = T.Compose([T.Resize(TARGET_SIZE), T.ToTensor()])
+
+train_transform = CombinedTransform(
+    rotation_degrees=15.0,
+    img_additional_transform=additional_transform,
+    mask_additional_transform=additional_transform,
 )
-test_dataset = TeethSegmentationDataset(
-    root=DATASET_ROOT,
-    imgs_dir=IMGS_DIR,
-    masks_dir=MASKS_DIR,
-    target_size=TARGET_SIZE,
-    split="val",
+test_transform = CombinedTransform(
+    rotation_degrees=0,
+    h_flip_prob=0,
+    v_flip_prob=0,
+    img_additional_transform=additional_transform,
+    mask_additional_transform=additional_transform,
 )
 
-train_data_loader = DataLoader(
+train_dataset = CarvanaDataset(
+    root=DATASET_ROOT, split="train", combined_transform=train_transform
+)
+test_dataset = CarvanaDataset(
+    root=DATASET_ROOT, split="test", combined_transform=test_transform
+)
+
+train_loader = DataLoader(
     dataset=train_dataset,
     batch_size=BATCH_SIZE,
     shuffle=True,
     pin_memory=PIN_MEMORY,
     num_workers=NUM_WORKERS,
 )
-test_data_loader = DataLoader(
+test_loader = DataLoader(
     dataset=test_dataset,
     batch_size=BATCH_SIZE,
     shuffle=False,
@@ -57,64 +62,63 @@ test_data_loader = DataLoader(
     num_workers=NUM_WORKERS,
 )
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-model = UNet(in_channels=1, num_classes=1).to(device)
-criterion = nn.BCEWithLogitsLoss()
-optimizer = torch.optim.AdamW(
-    params=model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
-)
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-    optimizer=optimizer, patience=PATIENCE
-)
-
 os.makedirs(CHECKPOINTS_DIR, exist_ok=True)
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+model = UNet(in_channels=3, num_classes=1).to(device)
+optimizer = torch.optim.Adam(params=model.parameters(), lr=LEARNING_RATE)
+loss_fn = BCEDiceLoss()
+
+batch_losses = []
+epoch_avg_losses = []
 
 best_dice_score = 0.0
 
 for epoch in range(NUM_EPOCHS):
     model.train()
-    running_losses = []
+    running_loss = 0.0
 
-    loop = tqdm(enumerate(train_data_loader), total=len(train_data_loader), leave=True)
+    loop = tqdm(enumerate(train_loader), total=len(train_loader), leave=True)
 
-    for i, (img, mask) in loop:
-        img = img.to(device)
-        mask = mask.to(device)
+    for _, (img, mask) in loop:
+        img = cast(torch.Tensor, img.to(device))
+        mask = cast(torch.Tensor, mask.to(device))
 
-        predication = model(img).to(device)
-        loss = criterion(predication, mask)
-
-        running_losses.append(loss.item())
+        pred = model(img)
+        loss = loss_fn(pred, mask)
 
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
-        loop.set_description(f"epoch [{epoch + 1}/{NUM_EPOCHS}]")
+        running_loss += loss.item()
+        batch_losses.append(loss.item())
+
+        loop.set_description(f"epoch [{epoch+1}/{NUM_EPOCHS}]")
         loop.set_postfix(loss=loss.item())
 
-    acc, dice_score = calculate_accuracy(model, test_data_loader, device)
-    mean_loss = sum(running_losses) / len(running_losses)
+    avg_loss = running_loss / len(train_loader)
+    dice_score = run_inference(model, test_loader, device)
 
-    scheduler.step(mean_loss)
+    epoch_avg_losses.append(running_loss / len(train_loader))
 
     if dice_score > best_dice_score:
-        best_dice_score = dice_score
+        dice_score = best_dice_score
+
         checkpoint = {
             "epoch": epoch,
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
-            "scheduler_state_dict": scheduler.state_dict(),
-            "loss": mean_loss,
+            "avg_loss": avg_loss,
             "dice_score": dice_score,
         }
 
-        best_model_path = os.path.join(CHECKPOINTS_DIR, "best_model.pth")
-        torch.save(checkpoint, best_model_path)
+        torch.save(checkpoint, os.path.join(CHECKPOINTS_DIR, "best_dice_score.pth"))
 
-        print(f"best dice score updated ({best_dice_score}). checkpoint saved")
+    print(f"summary for {epoch} epoch")
+    print(f"avg loss = {avg_loss:.4f}")
+    print(f"dice score = {dice_score:.4f}")
 
-    print(f"\nsummary for {epoch + 1} epoch")
-    print(f"  mean loss: {mean_loss}")
-    print(f"  acc: {acc:.4f}")
-    print(f"  dice score: {dice_score:.4f}")
+    break
+
+plot_loss_curve(batch_losses, epoch_avg_losses)
