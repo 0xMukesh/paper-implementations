@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 import torchvision.transforms.functional as TF
+from torchmetrics.segmentation import DiceScore
 import matplotlib.pyplot as plt
 import random
 from typing import cast, Literal, List
@@ -50,22 +51,10 @@ class CombinedTransform:
         return img, mask
 
 
-def calculate_dice_score(
-    pred: torch.Tensor, target: torch.Tensor, epsilon: float = 1e-8
-) -> float:
-    pred = pred.view(-1)
-    target = target.view(-1)
-
-    intersection = (pred * target).sum()
-    total = pred.sum() + target.sum()
-
-    dice = (2 * intersection) / (total + epsilon)
-    return dice.item()
-
-
 def run_inference(model: nn.Module, loader: DataLoader, device: Literal["cuda", "cpu"]):
     model.eval()
-    avg_dice_score = 0.0
+    dice = DiceScore(num_classes=1, average="micro")
+    dice_scores = []
 
     with torch.no_grad():
         for img, mask in loader:
@@ -73,11 +62,11 @@ def run_inference(model: nn.Module, loader: DataLoader, device: Literal["cuda", 
             mask = cast(torch.Tensor, mask.to(device))
 
             pred = torch.sigmoid(model(img))
-            dice_score = calculate_dice_score(pred, mask)
+            dice_score = dice(pred, mask)
 
-            avg_dice_score += dice_score
+            dice_scores.append(dice_score.item())
 
-    return avg_dice_score / len(loader)
+    return torch.median(torch.tensor(dice_scores)).item()
 
 
 def plot_loss_curve(batch_losses: List[float], epoch_avg_losses: List[float]):

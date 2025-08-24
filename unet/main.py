@@ -18,7 +18,7 @@ TARGET_SIZE = (960 // 4, 640 // 4)
 PIN_MEMORY = True
 NUM_WORKERS = 2
 
-NUM_EPOCHS = 1
+NUM_EPOCHS = 3
 BATCH_SIZE = 16
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 1e-3
@@ -118,7 +118,5 @@ for epoch in range(NUM_EPOCHS):
     print(f"summary for {epoch} epoch")
     print(f"avg loss = {avg_loss:.4f}")
     print(f"dice score = {dice_score:.4f}")
-
-    break
 
 plot_loss_curve(batch_losses, epoch_avg_losses)

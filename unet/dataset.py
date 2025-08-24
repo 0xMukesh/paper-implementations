@@ -47,3 +47,46 @@ class CarvanaDataset(Dataset):
             img, mask = self.combined_transform(img, mask)
 
         return (img, mask)
+
+
+class LucchiDataset(Dataset):
+    def __init__(
+        self,
+        root: str,
+        split: Literal["train", "test"],
+        combined_transform: CombinedTransform | None = None,
+    ) -> None:
+        super().__init__()
+
+        self.root = root
+        self.combined_transform = combined_transform
+        self.split = split.lower().capitalize()
+
+        self.img_dir = os.path.join(root, f"{self.split}_In")
+        self.mask_dir = os.path.join(root, f"{self.split}_Out")
+
+        self.img_files = sorted(
+            [f for f in os.listdir(self.img_dir) if f.endswith(".png")]
+        )
+        self.mask_files = sorted(
+            [
+                int(f.split(".")[0])
+                for f in os.listdir(self.mask_dir)
+                if f.endswith(".png")
+            ]
+        )
+
+    def __len__(self) -> int:
+        return len(self.img_files)
+
+    def __getitem__(self, idx):
+        img = Image.open(os.path.join(self.img_dir, self.img_files[idx])).convert("L")
+        mask = Image.open(
+            os.path.join(self.mask_dir, f"{self.mask_files[idx]}.png")
+        ).convert("L")
+        mask = Image.fromarray(np.asarray(mask) * 255).convert("L")
+
+        if self.combined_transform:
+            img, mask = self.combined_transform(img, mask)
+
+        return (img, mask)
