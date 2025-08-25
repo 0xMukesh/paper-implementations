@@ -6,22 +6,23 @@ from tqdm import tqdm
 import os
 from typing import cast
 
-from unet.dataset import CarvanaDataset
 from unet.model import UNet
+from unet.dataset import LucchiDataset
 from unet.loss import BCEDiceLoss
-from unet.utils import CombinedTransform, run_inference, plot_loss_curve
+from unet.utils import CombinedTransform, plot_loss_curve, run_inference
+
 
 np.random.seed(42)
 
-DATASET_ROOT = "/kaggle/input/carvana-image-masking-png"
-TARGET_SIZE = (960 // 4, 640 // 4)
+DATASET_ROOT = "/content/Lucchi++"
+TARGET_SIZE = (256, 192)
 PIN_MEMORY = True
 NUM_WORKERS = 2
 
-NUM_EPOCHS = 3
-BATCH_SIZE = 16
-LEARNING_RATE = 1e-4
-WEIGHT_DECAY = 1e-3
+NUM_EPOCHS = 10
+BATCH_SIZE = 8
+LEARNING_RATE = 1e-5
+WEIGHT_DECAY = 1e-4
 
 CHECKPOINTS_DIR = "checkpoints"
 
@@ -40,10 +41,10 @@ test_transform = CombinedTransform(
     mask_additional_transform=additional_transform,
 )
 
-train_dataset = CarvanaDataset(
+train_dataset = LucchiDataset(
     root=DATASET_ROOT, split="train", combined_transform=train_transform
 )
-test_dataset = CarvanaDataset(
+test_dataset = LucchiDataset(
     root=DATASET_ROOT, split="test", combined_transform=test_transform
 )
 
@@ -65,8 +66,11 @@ test_loader = DataLoader(
 os.makedirs(CHECKPOINTS_DIR, exist_ok=True)
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model = UNet(in_channels=3, num_classes=1).to(device)
+model = UNet(in_channels=1, num_classes=1).to(device)
 optimizer = torch.optim.Adam(params=model.parameters(), lr=LEARNING_RATE)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    optimizer, mode="max", factor=0.5, patience=3
+)
 loss_fn = BCEDiceLoss()
 
 batch_losses = []
@@ -99,12 +103,12 @@ for epoch in range(NUM_EPOCHS):
 
     avg_loss = running_loss / len(train_loader)
     dice_score = run_inference(model, test_loader, device)
+    scheduler.step(dice_score)
 
     epoch_avg_losses.append(running_loss / len(train_loader))
 
     if dice_score > best_dice_score:
-        dice_score = best_dice_score
-
+        best_dice_score = dice_score
         checkpoint = {
             "epoch": epoch,
             "model_state_dict": model.state_dict(),

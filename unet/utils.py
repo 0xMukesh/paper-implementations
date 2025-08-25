@@ -53,20 +53,20 @@ class CombinedTransform:
 
 def run_inference(model: nn.Module, loader: DataLoader, device: Literal["cuda", "cpu"]):
     model.eval()
-    dice = DiceScore(num_classes=1, average="micro")
-    dice_scores = []
+    dice = DiceScore(num_classes=2, average="micro").to(device)
 
     with torch.no_grad():
         for img, mask in loader:
             img = cast(torch.Tensor, img.to(device))
             mask = cast(torch.Tensor, mask.to(device))
 
-            pred = torch.sigmoid(model(img))
-            dice_score = dice(pred, mask)
+            pred_logits = model(img)
+            pred = (torch.sigmoid(pred_logits) > 0.5).long().squeeze(1)
+            mask = mask.long().squeeze(1)
 
-            dice_scores.append(dice_score.item())
+            dice.update(pred, mask)
 
-    return torch.median(torch.tensor(dice_scores)).item()
+    return dice.compute().item()
 
 
 def plot_loss_curve(batch_losses: List[float], epoch_avg_losses: List[float]):

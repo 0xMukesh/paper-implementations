@@ -1,10 +1,11 @@
+import torch
 from torch.utils.data import Dataset
 from PIL import Image
 import numpy as np
 import os
 from typing import Literal
 
-from .utils import CombinedTransform
+from unet.utils import CombinedTransform
 
 
 class CarvanaDataset(Dataset):
@@ -84,9 +85,14 @@ class LucchiDataset(Dataset):
         mask = Image.open(
             os.path.join(self.mask_dir, f"{self.mask_files[idx]}.png")
         ).convert("L")
-        mask = Image.fromarray(np.asarray(mask) * 255).convert("L")
 
         if self.combined_transform:
             img, mask = self.combined_transform(img, mask)
+
+        if isinstance(mask, torch.Tensor):
+            mask = (mask > 0.5).float()
+        else:
+            mask = torch.tensor(np.array(mask), dtype=torch.float32)
+            mask = (mask > 0.5 * 255).float()
 
         return (img, mask)
