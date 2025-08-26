@@ -6,10 +6,10 @@ from tqdm import tqdm
 import os
 from typing import cast
 
-from unet.model import UNet
-from unet.dataset import LucchiDataset
-from unet.loss import BCEDiceLoss
-from unet.utils import CombinedTransform, plot_loss_curve, run_inference
+from .models.attention_unet import AttentionUNet
+from .dataset import LucchiDataset
+from .loss import BCEDiceLoss
+from .utils import CombinedTransform, plot_loss_curve, run_inference
 
 
 np.random.seed(42)
@@ -66,7 +66,7 @@ test_loader = DataLoader(
 os.makedirs(CHECKPOINTS_DIR, exist_ok=True)
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model = UNet(in_channels=1, num_classes=1).to(device)
+model = AttentionUNet(in_channels=1, num_classes=1).to(device)
 optimizer = torch.optim.Adam(params=model.parameters(), lr=LEARNING_RATE)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
     optimizer, mode="max", factor=0.5, patience=3
