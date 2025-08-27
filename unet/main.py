@@ -1,4 +1,5 @@
 import torch
+from torch.amp.grad_scaler import GradScaler
 from torch.utils.data import DataLoader
 import torchvision.transforms as T
 import numpy as np
@@ -19,10 +20,10 @@ TARGET_SIZE = (256, 192)
 PIN_MEMORY = True
 NUM_WORKERS = 2
 
-NUM_EPOCHS = 10
-BATCH_SIZE = 8
-LEARNING_RATE = 1e-5
-WEIGHT_DECAY = 1e-4
+NUM_EPOCHS = 50
+BATCH_SIZE = 16
+LEARNING_RATE = 1e-4
+WEIGHT_DECAY = 1e-3
 
 CHECKPOINTS_DIR = "checkpoints"
 
@@ -68,10 +69,17 @@ os.makedirs(CHECKPOINTS_DIR, exist_ok=True)
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model = AttentionUNet(in_channels=1, num_classes=1).to(device)
 optimizer = torch.optim.Adam(params=model.parameters(), lr=LEARNING_RATE)
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-    optimizer, mode="max", factor=0.5, patience=3
+scheduler = torch.optim.lr_scheduler.OneCycleLR(
+    optimizer,
+    max_lr=1e-3,
+    total_steps=NUM_EPOCHS * len(train_loader),
+    pct_start=0.3,
+    div_factor=10,
+    final_div_factor=100,
+    anneal_strategy="cos",
 )
 loss_fn = BCEDiceLoss()
+scaler = GradScaler(device)
 
 batch_losses = []
 epoch_avg_losses = []
@@ -88,12 +96,17 @@ for epoch in range(NUM_EPOCHS):
         img = cast(torch.Tensor, img.to(device))
         mask = cast(torch.Tensor, mask.to(device))
 
-        pred = model(img)
-        loss = loss_fn(pred, mask)
+        with torch.autocast(device):
+            pred = model(img)
+            loss = loss_fn(pred, mask)
 
         optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+        scaler.scale(loss).backward()
+        scaler.unscale_(optimizer)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        scaler.step(optimizer)
+        scaler.update()
+        scheduler.step()
 
         running_loss += loss.item()
         batch_losses.append(loss.item())
@@ -103,7 +116,6 @@ for epoch in range(NUM_EPOCHS):
 
     avg_loss = running_loss / len(train_loader)
     dice_score = run_inference(model, test_loader, device)
-    scheduler.step(dice_score)
 
     epoch_avg_losses.append(running_loss / len(train_loader))
 

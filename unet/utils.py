@@ -63,7 +63,6 @@ def run_inference(model: nn.Module, loader: DataLoader, device: Literal["cuda", 
             pred_logits = model(img)
             pred = (torch.sigmoid(pred_logits) > 0.5).long().squeeze(1)
             mask = mask.long().squeeze(1)
-
             dice.update(pred, mask)
 
     return dice.compute().item()
@@ -73,12 +72,12 @@ def plot_loss_curve(batch_losses: List[float], epoch_avg_losses: List[float]):
     _, axes = plt.subplots(1, 2, figsize=(15, 10))
 
     axes[0].plot(batch_losses)
-    axes[0].set_xlabel("loss")
-    axes[0].set_ylabel("batch")
+    axes[0].set_xlabel("batch")
+    axes[0].set_ylabel("loss")
 
     axes[1].plot(epoch_avg_losses)
-    axes[1].set_xlabel("loss")
-    axes[1].set_ylabel("epoch")
+    axes[1].set_xlabel("epoch")
+    axes[1].set_ylabel("loss")
 
     plt.tight_layout()
     plt.show()
