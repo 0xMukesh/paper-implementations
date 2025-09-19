@@ -80,7 +80,7 @@ for epoch in range(config.epochs):
         real = rearrange(real, "b c h w -> b (c h w)").to(device)
 
         # discriminator: max log D(real) + log(1 - D(G(z)))
-        noise = torch.rand((config.batch_size, config.latent_size)).to(device)
+        noise = torch.randn((config.batch_size, config.latent_size)).to(device)
         fake = gen(noise)
 
         D_real = disc(real).view(-1)

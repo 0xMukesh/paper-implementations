@@ -52,8 +52,9 @@ class Generator(nn.Module):
             stride = 2 if i != 0 else 1
             padding = 1 if i != 0 else 0
 
-            net = net.append(
-                self._block(in_channels, g_channels * multiplier, 4, stride, padding)
+            net.add_module(
+                f"block_{i}",
+                self._block(in_channels, g_channels * multiplier, 4, stride, padding),
             )
 
             in_channels = g_channels * multiplier
@@ -87,13 +88,17 @@ class Discriminator(nn.Module):
         kernel_size: int,
         stride: int,
         padding: int,
+        use_batchnorm: bool = True,
         relu_slope: float = 0.2,
     ):
         net = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding),
-            nn.BatchNorm2d(out_channels),
-            nn.LeakyReLU(relu_slope, inplace=True),
         )
+
+        if use_batchnorm:
+            net.add_module("batchnorm", nn.BatchNorm2d(out_channels))
+
+        net.add_module("leakyrelu", nn.LeakyReLU(relu_slope, inplace=True))
 
         return net
 
@@ -105,8 +110,16 @@ class Discriminator(nn.Module):
             stride = 2 if i != num_blocks - 1 else 1
             padding = 1 if i != num_blocks - 1 else 0
 
-            net = net.append(
-                self._block(in_channels, d_channels * multiplier, 4, stride, padding)
+            net.add_module(
+                f"block_{i}",
+                self._block(
+                    in_channels,
+                    d_channels * multiplier,
+                    4,
+                    stride,
+                    padding,
+                    i != 0,
+                ),
             )
 
             in_channels = d_channels * multiplier
