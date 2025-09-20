@@ -19,3 +19,4 @@
 - **Squeeze-and-Excitation Networks** - [Paper](https://arxiv.org/abs/1709.01507v4), [Code](https://github.com/0xMukesh/MoNuSeg-Net/blob/main/src/models/unet.py)
 - **GAN** - [Paper](https://arxiv.org/pdf/1406.2661), [Code](./gan/gan.py)
 - **DCGAN** - [Paper](https://arxiv.org/pdf/1511.06434v2), [Code](./dcgan/main.py)
+- **CGAN** - [Paper](https://arxiv.org/abs/1411.1784), [Code]()
