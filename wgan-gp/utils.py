@@ -10,10 +10,12 @@ def calculate_grad_penalty(
     fake: torch.Tensor,
     device: Literal["cuda", "cpu"],
 ) -> torch.Tensor:
-    b, c, h, w = real.shape
-    alpha = torch.randn((b, 1, 1, 1)).to(device)
+    # alpha is sampled from an uniform distribution and not normal distribution
+    alpha = torch.rand((real.size(0), 1, 1, 1)).to(device)
 
     mixed = alpha * real + (1 - alpha) * fake
+    mixed.requires_grad_(True)
+
     critic_mixed = critic(mixed)
 
     gradient = torch.autograd.grad(
