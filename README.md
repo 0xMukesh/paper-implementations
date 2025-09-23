@@ -21,3 +21,4 @@
 - **DCGAN** - [Paper](https://arxiv.org/pdf/1511.06434v2), [Code](./dcgan/main.py)
 - **WGAN** - [Paper](https://arxiv.org/pdf/1701.07875v3), [Code](./wgan/main.py)
 - **WGAN-GP** - [Paper](https://arxiv.org/abs/1704.00028v3), [Code](./wgan-gp/main.py)
+- **cGAN** - [Paper](https://arxiv.org/abs/1411.1784v1), [Code](./cgan/main.py)
