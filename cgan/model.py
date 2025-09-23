@@ -114,7 +114,7 @@ class Critic(nn.Module):
         embedding = rearrange(
             embedding, "b (h w) -> b 1 h w", h=self.img_height, w=self.img_width
         )
-        
+
         x = torch.cat([x, embedding], dim=1)
 
         return self.net(x)
@@ -126,17 +126,12 @@ class Critic(nn.Module):
         kernel_size: int,
         stride: int,
         padding: int,
-        use_batchnorm: bool = True,
         relu_slope: float = 0.2,
     ):
         net = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding),
+            nn.LeakyReLU(relu_slope, inplace=True),
         )
-
-        if use_batchnorm:
-            net.add_module("batchnorm", nn.BatchNorm2d(out_channels))
-
-        net.add_module("leakyrelu", nn.LeakyReLU(relu_slope, inplace=True))
 
         return net
 
@@ -157,7 +152,6 @@ class Critic(nn.Module):
                     4,
                     stride,
                     padding,
-                    i != 0,
                 ),
             )
 

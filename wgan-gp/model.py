@@ -87,15 +87,15 @@ class Critic(nn.Module):
         kernel_size: int,
         stride: int,
         padding: int,
-        use_batchnorm: bool = True,
+        use_norm: bool = True,
         relu_slope: float = 0.2,
     ):
         net = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding),
         )
 
-        if use_batchnorm:
-            net.add_module("batchnorm", nn.BatchNorm2d(out_channels))
+        if use_norm:
+            net.add_module("layernorm", nn.LayerNorm(out_channels))
 
         net.add_module("leakyrelu", nn.LeakyReLU(relu_slope, inplace=True))
 

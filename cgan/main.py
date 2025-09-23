@@ -12,10 +12,10 @@ class Config:
     epochs = 1
     batch_size = 64
 
-    lr_gen = 1e-5
-    lr_critic = 4e-5
+    lr_gen = 2e-4
+    lr_critic = 1e-4
 
-    critic_iter = 5
+    critic_iter = 2
     lambda_gp = 10
 
     img_size = (32, 32)
